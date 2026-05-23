@@ -120,6 +120,10 @@
     fillLight.position.set(-5, 2, -4);
     scene.add(fillLight);
 
+    const bottomLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    bottomLight.position.set(-3, -6, 4);
+    scene.add(bottomLight);
+
     const cubelets = [];
     const cubeletSize = 0.92;
     const turnDuration = 260;
@@ -147,8 +151,11 @@
     };
 
     function createFaceMaterial(color) {
+      const isSticker = color !== stickerColors.hidden;
       return new THREE.MeshStandardMaterial({
         color,
+        emissive: isSticker ? color : 0x000000,
+        emissiveIntensity: isSticker ? 0.08 : 0,
         roughness: 0.54,
         metalness: 0.02
       });
