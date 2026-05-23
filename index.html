@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <title>Rubik's Cube Emulator</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #151719;
+      color: #f5f7fa;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .hud {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      max-width: min(360px, calc(100vw - 32px));
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(20, 22, 25, 0.76);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(10px);
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .hud h1 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .hud p {
+      margin: 0;
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    kbd {
+      display: inline-flex;
+      min-width: 22px;
+      height: 20px;
+      align-items: center;
+      justify-content: center;
+      margin: 0 2px;
+      padding: 0 5px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="hud" aria-hidden="true">
+    <h1>Rubik's Cube Emulator</h1>
+    <p>
+      Turn faces with <kbd>F</kbd><kbd>B</kbd><kbd>U</kbd><kbd>D</kbd><kbd>R</kbd><kbd>L</kbd>.
+      Hold <kbd>Shift</kbd> for counterclockwise turns. Drag to orbit.
+    </p>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x151719);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 4.5, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x2f3540, 2.2));
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    keyLight.position.set(6, 8, 5);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xc7ddff, 0.9);
+    fillLight.position.set(-5, 2, -4);
+    scene.add(fillLight);
+
+    const cubelets = [];
+    const cubeletSize = 0.92;
+    const turnDuration = 260;
+    const quarterTurn = Math.PI / 2;
+    const reusableVector = new THREE.Vector3();
+    const reusableMatrix = new THREE.Matrix4();
+
+    const stickerColors = {
+      right: 0xd8292f,
+      left: 0xff8a00,
+      up: 0xf8fafc,
+      down: 0xffd000,
+      front: 0x1fbf5b,
+      back: 0x2563eb,
+      hidden: 0x101214
+    };
+
+    const moveMap = {
+      f: { axis: "z", layer: 1, direction: -1 },
+      b: { axis: "z", layer: -1, direction: 1 },
+      u: { axis: "y", layer: 1, direction: -1 },
+      d: { axis: "y", layer: -1, direction: 1 },
+      r: { axis: "x", layer: 1, direction: -1 },
+      l: { axis: "x", layer: -1, direction: 1 }
+    };
+
+    function createFaceMaterial(color) {
+      return new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.54,
+        metalness: 0.02
+      });
+    }
+
+    function createCubelet(x, y, z) {
+      const geometry = new THREE.BoxGeometry(cubeletSize, cubeletSize, cubeletSize);
+      const materials = [
+        createFaceMaterial(x === 1 ? stickerColors.right : stickerColors.hidden),
+        createFaceMaterial(x === -1 ? stickerColors.left : stickerColors.hidden),
+        createFaceMaterial(y === 1 ? stickerColors.up : stickerColors.hidden),
+        createFaceMaterial(y === -1 ? stickerColors.down : stickerColors.hidden),
+        createFaceMaterial(z === 1 ? stickerColors.front : stickerColors.hidden),
+        createFaceMaterial(z === -1 ? stickerColors.back : stickerColors.hidden)
+      ];
+
+      const cubelet = new THREE.Mesh(geometry, materials);
+      cubelet.position.set(x, y, z);
+      cubelet.userData.grid = new THREE.Vector3(x, y, z);
+      scene.add(cubelet);
+      cubelets.push(cubelet);
+    }
+
+    for (let x = -1; x <= 1; x += 1) {
+      for (let y = -1; y <= 1; y += 1) {
+        for (let z = -1; z <= 1; z += 1) {
+          if (x !== 0 || y !== 0 || z !== 0) {
+            createCubelet(x, y, z);
+          }
+        }
+      }
+    }
+
+    const moveQueue = [];
+    let activeTurn = null;
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function getFaceCubelets(axis, layer) {
+      return cubelets.filter((cubelet) => cubelet.userData.grid[axis] === layer);
+    }
+
+    function rotateGridPosition(grid, axis, direction) {
+      const { x, y, z } = grid;
+
+      if (axis === "x") {
+        grid.y = -direction * z;
+        grid.z = direction * y;
+      } else if (axis === "y") {
+        grid.x = direction * z;
+        grid.z = -direction * x;
+      } else {
+        grid.x = -direction * y;
+        grid.y = direction * x;
+      }
+    }
+
+    function snapNumber(value) {
+      return Math.round(value);
+    }
+
+    function snapQuaternionToRightAngles(cubelet) {
+      reusableMatrix.makeRotationFromQuaternion(cubelet.quaternion);
+      const elements = reusableMatrix.elements;
+      const xAxis = snapBasisVector(elements[0], elements[1], elements[2]);
+      const yAxis = snapBasisVector(elements[4], elements[5], elements[6]);
+      const zAxis = snapBasisVector(elements[8], elements[9], elements[10]);
+
+      reusableMatrix.makeBasis(xAxis, yAxis, zAxis);
+      cubelet.quaternion.setFromRotationMatrix(reusableMatrix).normalize();
+    }
+
+    function snapBasisVector(x, y, z) {
+      reusableVector.set(x, y, z);
+      const ax = Math.abs(x);
+      const ay = Math.abs(y);
+      const az = Math.abs(z);
+
+      if (ax >= ay && ax >= az) {
+        return new THREE.Vector3(Math.sign(x) || 1, 0, 0);
+      }
+
+      if (ay >= ax && ay >= az) {
+        return new THREE.Vector3(0, Math.sign(y) || 1, 0);
+      }
+
+      return new THREE.Vector3(0, 0, Math.sign(z) || 1);
+    }
+
+    function finalizeTurn(turn) {
+      turn.pivot.rotation[turn.axis] = turn.angle;
+      turn.pivot.updateMatrixWorld(true);
+
+      turn.face.forEach((cubelet) => {
+        scene.attach(cubelet);
+        rotateGridPosition(cubelet.userData.grid, turn.axis, turn.direction);
+        cubelet.position.set(
+          snapNumber(cubelet.userData.grid.x),
+          snapNumber(cubelet.userData.grid.y),
+          snapNumber(cubelet.userData.grid.z)
+        );
+        snapQuaternionToRightAngles(cubelet);
+        cubelet.updateMatrixWorld(true);
+      });
+
+      scene.remove(turn.pivot);
+      activeTurn = null;
+      startNextTurn();
+    }
+
+    function startNextTurn() {
+      if (activeTurn || moveQueue.length === 0) {
+        return;
+      }
+
+      const move = moveQueue.shift();
+      const face = getFaceCubelets(move.axis, move.layer);
+      const pivot = new THREE.Object3D();
+      const angle = move.direction * quarterTurn;
+
+      scene.add(pivot);
+      pivot.updateMatrixWorld(true);
+      face.forEach((cubelet) => pivot.attach(cubelet));
+
+      activeTurn = {
+        ...move,
+        angle,
+        face,
+        pivot,
+        startedAt: performance.now()
+      };
+    }
+
+    function enqueueTurn(axis, layer, direction) {
+      moveQueue.push({ axis, layer, direction });
+      startNextTurn();
+    }
+
+    window.addEventListener("keydown", (event) => {
+      const move = moveMap[event.key.toLowerCase()];
+      if (!move || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      event.preventDefault();
+      const direction = event.shiftKey ? -move.direction : move.direction;
+      enqueueTurn(move.axis, move.layer, direction);
+    });
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      if (activeTurn) {
+        const elapsed = now - activeTurn.startedAt;
+        const t = Math.min(elapsed / turnDuration, 1);
+        activeTurn.pivot.rotation[activeTurn.axis] = activeTurn.angle * easeInOutCubic(t);
+
+        if (t >= 1) {
+          finalizeTurn(activeTurn);
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.cubeDebug = {
+      cubelets,
+      enqueueTurn,
+      moveQueue,
+      get activeTurn() {
+        return activeTurn;
+      }
+    };
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
