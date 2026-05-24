@@ -288,6 +288,17 @@
     const scrambleSequence = document.querySelector("#scrambleSequence");
     const scrambleFaces = ["F", "B", "U", "D", "R", "L"];
     const scrambleSuffixes = ["", "'", "2"];
+    const moveSoundUrl = "assets/rubik-move.mp3";
+    const soundSliceDuration = 0.16;
+    const moveSoundOffsets = [
+      1.080, 1.280, 1.880, 2.080, 2.400, 3.480, 4.000, 6.800,
+      8.840, 9.600, 9.880, 10.600, 11.080, 11.560, 12.440, 13.600,
+      13.840, 14.080, 14.440, 15.240, 16.200, 17.640, 18.600, 19.560
+    ];
+    let audioContext = null;
+    let audioMaster = null;
+    let moveSoundBuffer = null;
+    let moveSoundLoadPromise = null;
     let activeTurn = null;
 
     function easeInOutCubic(t) {
@@ -345,6 +356,64 @@
       return new THREE.Vector3(0, 0, Math.sign(z) || 1);
     }
 
+    async function unlockAudio() {
+      if (!audioContext) {
+        audioContext = new AudioContext();
+        const compressor = audioContext.createDynamicsCompressor();
+        compressor.threshold.value = -18;
+        compressor.knee.value = 18;
+        compressor.ratio.value = 5;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.08;
+        compressor.connect(audioContext.destination);
+        audioMaster = compressor;
+      }
+
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
+      if (!moveSoundLoadPromise) {
+        moveSoundLoadPromise = fetch(moveSoundUrl)
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`Unable to load ${moveSoundUrl}`);
+            }
+            return response.arrayBuffer();
+          })
+          .then((audioData) => audioContext.decodeAudioData(audioData))
+          .then((buffer) => {
+            moveSoundBuffer = buffer;
+          })
+          .catch((error) => {
+            console.warn(error);
+          });
+      }
+    }
+
+    function playMoveSound(duration = turnDuration) {
+      void unlockAudio();
+
+      if (!audioContext || !moveSoundBuffer) {
+        return;
+      }
+
+      const source = audioContext.createBufferSource();
+      const gain = audioContext.createGain();
+      const now = audioContext.currentTime;
+      const sliceDuration = Math.min(soundSliceDuration, duration / 1000);
+      const offsets = moveSoundOffsets.filter((offset) => offset + sliceDuration < moveSoundBuffer.duration);
+      const offset = offsets[Math.floor(Math.random() * offsets.length)] ?? 0;
+
+      source.buffer = moveSoundBuffer;
+      source.playbackRate.value = 0.96 + Math.random() * 0.1;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(1.8, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + sliceDuration);
+      source.connect(gain).connect(audioMaster);
+      source.start(now, offset, sliceDuration);
+    }
+
     function finalizeTurn(turn) {
       turn.pivot.rotation[turn.axis] = turn.angle;
       turn.pivot.updateMatrixWorld(true);
@@ -389,6 +458,7 @@
         duration: move.duration ?? turnDuration,
         startedAt: performance.now()
       };
+      playMoveSound(activeTurn.duration);
       updateScrambleButton();
     }
 
