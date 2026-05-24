@@ -55,6 +55,53 @@
       line-height: 1.55;
     }
 
+    .scramble-panel {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      width: min(720px, calc(100vw - 32px));
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(20, 22, 25, 0.78);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(10px);
+    }
+
+    .scramble-panel button {
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      background: #f5f7fa;
+      color: #151719;
+      font: 700 13px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    .scramble-panel button:disabled {
+      cursor: wait;
+      opacity: 0.62;
+    }
+
+    .scramble-sequence {
+      min-width: 0;
+      color: #e2e8f0;
+      font: 700 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .scramble-sequence:empty::before {
+      content: "Scramble sequence will appear here.";
+      color: #94a3b8;
+      font: 500 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
     kbd {
       display: inline-flex;
       min-width: 22px;
@@ -69,6 +116,12 @@
       color: #ffffff;
       font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
+
+    @media (max-width: 560px) {
+      .scramble-panel {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -78,6 +131,11 @@
       Turn faces with <kbd>F</kbd><kbd>B</kbd><kbd>U</kbd><kbd>D</kbd><kbd>R</kbd><kbd>L</kbd>.
       Hold <kbd>Shift</kbd> for counterclockwise turns. Drag to orbit.
     </p>
+  </div>
+
+  <div class="scramble-panel">
+    <button type="button" id="scrambleButton">Scramble</button>
+    <div class="scramble-sequence" id="scrambleSequence" aria-live="polite"></div>
   </div>
 
   <script type="importmap">
@@ -126,7 +184,10 @@
 
     const cubelets = [];
     const cubeletSize = 0.92;
+    const stickerSize = 0.68;
+    const stickerOffset = cubeletSize / 2 + 0.006;
     const turnDuration = 260;
+    const scrambleTurnDuration = turnDuration / 2;
     const quarterTurn = Math.PI / 2;
     const reusableVector = new THREE.Vector3();
     const reusableMatrix = new THREE.Matrix4();
@@ -150,29 +211,62 @@
       l: { axis: "x", layer: -1, direction: 1 }
     };
 
-    function createFaceMaterial(color) {
-      const isSticker = color !== stickerColors.hidden;
+    function createStickerMaterial(color) {
       return new THREE.MeshStandardMaterial({
         color,
-        emissive: isSticker ? color : 0x000000,
-        emissiveIntensity: isSticker ? 0.08 : 0,
+        emissive: color,
+        emissiveIntensity: 0.08,
         roughness: 0.54,
         metalness: 0.02
       });
     }
 
-    function createCubelet(x, y, z) {
-      const geometry = new THREE.BoxGeometry(cubeletSize, cubeletSize, cubeletSize);
-      const materials = [
-        createFaceMaterial(x === 1 ? stickerColors.right : stickerColors.hidden),
-        createFaceMaterial(x === -1 ? stickerColors.left : stickerColors.hidden),
-        createFaceMaterial(y === 1 ? stickerColors.up : stickerColors.hidden),
-        createFaceMaterial(y === -1 ? stickerColors.down : stickerColors.hidden),
-        createFaceMaterial(z === 1 ? stickerColors.front : stickerColors.hidden),
-        createFaceMaterial(z === -1 ? stickerColors.back : stickerColors.hidden)
-      ];
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: stickerColors.hidden,
+      roughness: 0.62,
+      metalness: 0.02
+    });
 
-      const cubelet = new THREE.Mesh(geometry, materials);
+    function addSticker(cubelet, color, position, rotation) {
+      const sticker = new THREE.Mesh(
+        new THREE.PlaneGeometry(stickerSize, stickerSize),
+        createStickerMaterial(color)
+      );
+
+      sticker.position.copy(position);
+      sticker.rotation.set(rotation.x, rotation.y, rotation.z);
+      cubelet.add(sticker);
+    }
+
+    function createCubelet(x, y, z) {
+      const cubelet = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(cubeletSize, cubeletSize, cubeletSize), bodyMaterial);
+      cubelet.add(body);
+
+      if (x === 1) {
+        addSticker(cubelet, stickerColors.right, new THREE.Vector3(stickerOffset, 0, 0), new THREE.Euler(0, Math.PI / 2, 0));
+      }
+
+      if (x === -1) {
+        addSticker(cubelet, stickerColors.left, new THREE.Vector3(-stickerOffset, 0, 0), new THREE.Euler(0, -Math.PI / 2, 0));
+      }
+
+      if (y === 1) {
+        addSticker(cubelet, stickerColors.up, new THREE.Vector3(0, stickerOffset, 0), new THREE.Euler(-Math.PI / 2, 0, 0));
+      }
+
+      if (y === -1) {
+        addSticker(cubelet, stickerColors.down, new THREE.Vector3(0, -stickerOffset, 0), new THREE.Euler(Math.PI / 2, 0, 0));
+      }
+
+      if (z === 1) {
+        addSticker(cubelet, stickerColors.front, new THREE.Vector3(0, 0, stickerOffset), new THREE.Euler(0, 0, 0));
+      }
+
+      if (z === -1) {
+        addSticker(cubelet, stickerColors.back, new THREE.Vector3(0, 0, -stickerOffset), new THREE.Euler(0, Math.PI, 0));
+      }
+
       cubelet.position.set(x, y, z);
       cubelet.userData.grid = new THREE.Vector3(x, y, z);
       scene.add(cubelet);
@@ -190,6 +284,10 @@
     }
 
     const moveQueue = [];
+    const scrambleButton = document.querySelector("#scrambleButton");
+    const scrambleSequence = document.querySelector("#scrambleSequence");
+    const scrambleFaces = ["F", "B", "U", "D", "R", "L"];
+    const scrambleSuffixes = ["", "'", "2"];
     let activeTurn = null;
 
     function easeInOutCubic(t) {
@@ -265,6 +363,7 @@
 
       scene.remove(turn.pivot);
       activeTurn = null;
+      updateScrambleButton();
       startNextTurn();
     }
 
@@ -287,13 +386,61 @@
         angle,
         face,
         pivot,
+        duration: move.duration ?? turnDuration,
         startedAt: performance.now()
       };
+      updateScrambleButton();
     }
 
-    function enqueueTurn(axis, layer, direction) {
-      moveQueue.push({ axis, layer, direction });
+    function enqueueTurn(axis, layer, direction, duration = turnDuration) {
+      moveQueue.push({ axis, layer, direction, duration });
+      updateScrambleButton();
       startNextTurn();
+    }
+
+    function updateScrambleButton() {
+      scrambleButton.disabled = Boolean(activeTurn || moveQueue.length > 0);
+    }
+
+    function generateScramble(length = 20) {
+      const moves = [];
+      let previousFace = "";
+
+      while (moves.length < length) {
+        const face = scrambleFaces[Math.floor(Math.random() * scrambleFaces.length)];
+        if (face === previousFace) {
+          continue;
+        }
+
+        const suffix = scrambleSuffixes[Math.floor(Math.random() * scrambleSuffixes.length)];
+        moves.push(`${face}${suffix}`);
+        previousFace = face;
+      }
+
+      return moves;
+    }
+
+    function enqueueNotationMove(notation) {
+      const face = notation[0].toLowerCase();
+      const suffix = notation.slice(1);
+      const move = moveMap[face];
+      const turns = suffix === "2" ? 2 : 1;
+      const direction = suffix === "'" ? -move.direction : move.direction;
+
+      for (let i = 0; i < turns; i += 1) {
+        enqueueTurn(move.axis, move.layer, direction, scrambleTurnDuration);
+      }
+    }
+
+    function runScramble() {
+      if (activeTurn || moveQueue.length > 0) {
+        return;
+      }
+
+      const scramble = generateScramble();
+      scrambleSequence.textContent = scramble.join(" ");
+      scramble.forEach(enqueueNotationMove);
+      updateScrambleButton();
     }
 
     window.addEventListener("keydown", (event) => {
@@ -307,12 +454,14 @@
       enqueueTurn(move.axis, move.layer, direction);
     });
 
+    scrambleButton.addEventListener("click", runScramble);
+
     function animate(now) {
       requestAnimationFrame(animate);
 
       if (activeTurn) {
         const elapsed = now - activeTurn.startedAt;
-        const t = Math.min(elapsed / turnDuration, 1);
+        const t = Math.min(elapsed / activeTurn.duration, 1);
         activeTurn.pivot.rotation[activeTurn.axis] = activeTurn.angle * easeInOutCubic(t);
 
         if (t >= 1) {
@@ -333,6 +482,8 @@
     window.cubeDebug = {
       cubelets,
       enqueueTurn,
+      generateScramble,
+      runScramble,
       moveQueue,
       get activeTurn() {
         return activeTurn;
