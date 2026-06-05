@@ -452,7 +452,7 @@ async function runSolverStep() {
   updateControls();
 
   try {
-    const moves = await Promise.resolve(solver.step(logicalCubeState.clone()));
+    const moves = await solver.step(logicalCubeState.clone());
 
     if (!Array.isArray(moves) || moves.length === 0) {
       appendSolverLog(solver.noResultLabel);

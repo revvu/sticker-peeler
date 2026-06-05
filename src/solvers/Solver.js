@@ -1,3 +1,5 @@
+import { yieldToBrowser } from "./utils/yieldToBrowser.js";
+
 export class Solver {
   constructor({ consoleSink = null } = {}) {
     this.consoleSink = consoleSink;
@@ -20,11 +22,12 @@ export class Solver {
     this.consoleSink = consoleSink;
   }
 
-  print(message) {
+  async print(message) {
     const text = String(message);
 
     if (this.consoleSink) {
       this.consoleSink(text, this);
+      await yieldToBrowser();
       return;
     }
 

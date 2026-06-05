@@ -11,22 +11,8 @@ import { buildTransformationCache } from "./transformationCache.js";
 
 export const TREE_SEARCH_MAX_DEPTH = 10;
 
-export function treeSearch(cubeState, maxDepth = TREE_SEARCH_MAX_DEPTH) {
-  const startStateKey = getCubeStateKey(cubeState);
-
-  if (startStateKey === SOLVED_STATE_KEY) {
-    return {
-      moves: [],
-      found: true,
-      exhausted: true,
-      maxDepth,
-      searchedNodes: 1
-    };
-  }
-
-  const forwardDepth = Math.floor(maxDepth / 2);
-  const backwardDepth = maxDepth - forwardDepth;
-  const transformationCache = buildTransformationCache(backwardDepth);
+export function runForwardSearch(startStateKey, transformationCache, forwardDepth, maxDepth) {
+  const searchStart = performance.now();
   let searchedNodes = 1;
   let solutionMoves = null;
 
@@ -84,8 +70,49 @@ export function treeSearch(cubeState, maxDepth = TREE_SEARCH_MAX_DEPTH) {
   return {
     moves: solutionMoves,
     found: Boolean(solutionMoves),
+    searchedNodes,
+    searchMs: performance.now() - searchStart
+  };
+}
+
+export function treeSearch(cubeState, maxDepth = TREE_SEARCH_MAX_DEPTH) {
+  const startStateKey = getCubeStateKey(cubeState);
+
+  if (startStateKey === SOLVED_STATE_KEY) {
+    return {
+      moves: [],
+      found: true,
+      exhausted: true,
+      maxDepth,
+      searchedNodes: 1,
+      cacheBuildMs: 0,
+      searchMs: 0,
+      cacheHit: true
+    };
+  }
+
+  const forwardDepth = Math.floor(maxDepth / 2);
+  const backwardDepth = maxDepth - forwardDepth;
+
+  const cacheBuildStart = performance.now();
+  const { cache: transformationCache, cacheHit } = buildTransformationCache(backwardDepth);
+  const cacheBuildMs = performance.now() - cacheBuildStart;
+
+  const forwardResult = runForwardSearch(
+    startStateKey,
+    transformationCache,
+    forwardDepth,
+    maxDepth
+  );
+
+  return {
+    moves: forwardResult.moves,
+    found: forwardResult.found,
     exhausted: true,
     maxDepth,
-    searchedNodes
+    searchedNodes: forwardResult.searchedNodes,
+    cacheBuildMs,
+    searchMs: forwardResult.searchMs,
+    cacheHit
   };
 }
