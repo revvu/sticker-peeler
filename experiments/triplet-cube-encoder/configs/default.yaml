@@ -8,12 +8,12 @@ training:
   epochs: 100
   learning_rate: 0.0003
   weight_decay: 0.0001
-  margin: 0.2
-  early_stop_metric: triplet_accuracy
+  margin: 0.1
+  solved_cosine_weight: 0.25
+  early_stop_metric: solved_cosine
   early_stop_mode: max
   early_stop_patience: 15
   train_split: 0.85
-  state_disjoint_split: true
   grad_clip_norm: 1.0
   lr_schedule: cosine
   seed: 42

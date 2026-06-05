@@ -7,7 +7,8 @@ import {
 } from "./cube/CubeState.js";
 import { treeSearch } from "./solvers/utils/treeSearch.js";
 import { availableSolvers } from "./solvers/index.js";
-import { getSimilarityToSolved, initJepaEncoder } from "./jepa/similarity.js";
+import { getSimilarityToSolved as getJepaSimilarityToSolved, initJepaEncoder } from "./jepa/similarity.js";
+import { getSimilarityToSolved as getTripletSimilarityToSolved, initTripletEncoder } from "./triplet/similarity.js";
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x151719);
@@ -63,6 +64,7 @@ const stickerColors = {
 
 const moveQueue = [];
 const jepaSimilarity = document.querySelector("#jepaSimilarity");
+const tripletSimilarity = document.querySelector("#tripletSimilarity");
 const scrambleButton = document.querySelector("#scrambleButton");
 const scrambleSequence = document.querySelector("#scrambleSequence");
 const solverSelect = document.querySelector("#solverSelect");
@@ -400,18 +402,26 @@ function enqueueTurn(axis, layer, direction, duration = turnDuration) {
   startNextTurn();
 }
 
-function updateJepaSimilarity() {
-  if (!jepaSimilarity) {
-    return;
+function updateEncoderSimilarity() {
+  const stateKey = logicalCubeState.key;
+
+  if (jepaSimilarity) {
+    const jepaScore = getJepaSimilarityToSolved(stateKey);
+    if (jepaScore === null) {
+      jepaSimilarity.textContent = "(JEPA) Similarity to solved: unavailable";
+    } else {
+      jepaSimilarity.innerHTML = `(JEPA) Similarity to solved: <strong>${jepaScore.toFixed(3)}</strong>`;
+    }
   }
 
-  const similarity = getSimilarityToSolved(logicalCubeState.key);
-  if (similarity === null) {
-    jepaSimilarity.textContent = "(JEPA) Similarity to solved: unavailable";
-    return;
+  if (tripletSimilarity) {
+    const tripletScore = getTripletSimilarityToSolved(stateKey);
+    if (tripletScore === null) {
+      tripletSimilarity.textContent = "(Triplet Loss) Similarity to solved: unavailable";
+    } else {
+      tripletSimilarity.innerHTML = `(Triplet Loss) Similarity to solved: <strong>${tripletScore.toFixed(3)}</strong>`;
+    }
   }
-
-  jepaSimilarity.innerHTML = `(JEPA) Similarity to solved: <strong>${similarity.toFixed(3)}</strong>`;
 }
 
 function runNotationMoves(moves, duration = turnDuration) {
@@ -426,7 +436,7 @@ function runNotationMoves(moves, duration = turnDuration) {
     }
   }
 
-  updateJepaSimilarity();
+  updateEncoderSimilarity();
   updateControls();
 }
 
@@ -541,7 +551,7 @@ window.addEventListener("resize", () => {
 attachSolverConsole();
 populateSolvers();
 updateControls();
-initJepaEncoder().then(updateJepaSimilarity);
+Promise.all([initJepaEncoder(), initTripletEncoder()]).then(updateEncoderSimilarity);
 
 window.cubeDebug = {
   cubelets,

@@ -35,8 +35,8 @@ class TripletDataset(Dataset):
             "positive": torch.tensor(state_key_to_indices(example["positiveKey"]), dtype=torch.long),
             "negative": torch.tensor(state_key_to_indices(example["negativeKey"]), dtype=torch.long),
             "anchor_key": example["anchorKey"],
-            "positive_len": example["positiveLen"],
-            "negative_len": example["negativeLen"],
+            "positive_dist": example["positiveDist"],
+            "negative_dist": example["negativeDist"],
         }
 
 
@@ -50,18 +50,12 @@ def load_examples(dataset_path: Path) -> list[dict]:
     return examples
 
 
-def split_examples_by_anchor(examples: list[dict], train_split: float, seed: int) -> tuple[list[dict], list[dict]]:
-    anchors = sorted({example["anchorKey"] for example in examples})
+def split_examples(examples: list[dict], train_split: float, seed: int) -> tuple[list[dict], list[dict]]:
     rng = random.Random(seed)
-    rng.shuffle(anchors)
-    split_index = max(1, int(len(anchors) * train_split))
-    if split_index >= len(anchors):
-        split_index = len(anchors) - 1
-
-    train_anchors = set(anchors[:split_index])
-    train_examples = [example for example in examples if example["anchorKey"] in train_anchors]
-    val_examples = [example for example in examples if example["anchorKey"] not in train_anchors]
-    return train_examples, val_examples
+    shuffled = examples[:]
+    rng.shuffle(shuffled)
+    split_index = int(len(shuffled) * train_split)
+    return shuffled[:split_index], shuffled[split_index:]
 
 
 def encode_normalized(model: CubeEncoder, states: torch.Tensor) -> torch.Tensor:
@@ -78,41 +72,9 @@ def triplet_loss(anchor: torch.Tensor, positive: torch.Tensor, negative: torch.T
     return F.relu(distance_positive - distance_negative + margin).mean()
 
 
-def select_semi_hard_negatives(
-    anchors: torch.Tensor,
-    positives: torch.Tensor,
-    negatives: torch.Tensor,
-    margin: float,
-) -> torch.Tensor:
-    batch_size = anchors.shape[0]
-    distance_positive = pairwise_squared_distance(anchors, positives)
-    distance_negative = pairwise_squared_distance(anchors, negatives).unsqueeze(1)
-    all_negatives = negatives.unsqueeze(0).expand(batch_size, batch_size, -1)
-    all_anchor = anchors.unsqueeze(1).expand(batch_size, batch_size, -1)
-    batch_distances = pairwise_squared_distance(
-        all_anchor.reshape(-1, all_anchor.shape[-1]),
-        all_negatives.reshape(-1, all_negatives.shape[-1]),
-    ).reshape(batch_size, batch_size)
-
-    selected = []
-    for row in range(batch_size):
-        positive_distance = distance_positive[row]
-        candidate_mask = batch_distances[row] > positive_distance
-        semi_hard_mask = (batch_distances[row] > positive_distance) & (batch_distances[row] < positive_distance + margin)
-        candidates = torch.where(semi_hard_mask)[0]
-
-        if candidates.numel() > 0:
-            pick = candidates[torch.randint(0, candidates.numel(), (1,)).item()]
-        else:
-            hard_candidates = torch.where(candidate_mask)[0]
-            if hard_candidates.numel() > 0:
-                pick = hard_candidates[torch.argmin(batch_distances[row, hard_candidates])]
-            else:
-                pick = row
-
-        selected.append(negatives[pick])
-
-    return torch.stack(selected, dim=0)
+def solved_cosine_loss(embeddings: torch.Tensor, solved_embedding: torch.Tensor) -> torch.Tensor:
+    cosine = F.cosine_similarity(embeddings, solved_embedding.expand_as(embeddings), dim=-1)
+    return (1.0 - cosine).mean()
 
 
 def save_checkpoint(
@@ -154,8 +116,8 @@ def evaluate(
     correct = 0
     total = 0
     solved_cosines = []
-    length_proxies = []
-    solved_distances = []
+    bfs_distances = []
+    embedding_distances = []
 
     solved_embedding = encode_normalized(model, solved_indices)
 
@@ -173,30 +135,35 @@ def evaluate(
         correct += int((distance_positive + margin < distance_negative).sum().item())
         total += anchor.shape[0]
 
-        anchor_solved_cosine = F.cosine_similarity(anchor, solved_embedding.expand_as(anchor), dim=-1)
-        solved_cosines.extend(anchor_solved_cosine.cpu().tolist())
-        solved_distances.extend(pairwise_squared_distance(anchor, solved_embedding.expand_as(anchor)).sqrt().cpu().tolist())
-        length_proxies.extend(
-            (batch["negative_len"].float() - batch["positive_len"].float()).abs().cpu().tolist()
-        )
+        positive_solved_cosine = F.cosine_similarity(positive, solved_embedding.expand_as(positive), dim=-1)
+        negative_solved_cosine = F.cosine_similarity(negative, solved_embedding.expand_as(negative), dim=-1)
+        solved_cosines.extend(positive_solved_cosine.cpu().tolist())
+        solved_cosines.extend(negative_solved_cosine.cpu().tolist())
 
-    length_correlation = 0.0
-    if len(length_proxies) > 1 and len(set(length_proxies)) > 1:
-        correlation = spearmanr(length_proxies, solved_distances)
-        length_correlation = float(correlation.correlation or 0.0)
+        positive_embedding_distance = pairwise_squared_distance(positive, solved_embedding.expand_as(positive)).sqrt()
+        negative_embedding_distance = pairwise_squared_distance(negative, solved_embedding.expand_as(negative)).sqrt()
+        embedding_distances.extend(positive_embedding_distance.cpu().tolist())
+        embedding_distances.extend(negative_embedding_distance.cpu().tolist())
+        bfs_distances.extend(batch["positive_dist"].float().cpu().tolist())
+        bfs_distances.extend(batch["negative_dist"].float().cpu().tolist())
+
+    distance_correlation = 0.0
+    if len(bfs_distances) > 1 and len(set(bfs_distances)) > 1:
+        correlation = spearmanr(bfs_distances, embedding_distances)
+        distance_correlation = float(correlation.correlation or 0.0)
 
     return {
         "loss": total_loss / max(batches, 1),
         "triplet_accuracy": correct / max(total, 1),
         "solved_cosine": sum(solved_cosines) / max(len(solved_cosines), 1),
-        "length_correlation": length_correlation,
+        "distance_correlation": distance_correlation,
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=ROOT / "configs/default.yaml")
-    parser.add_argument("--run-name", default="cube-triplet-v1")
+    parser.add_argument("--run-name", default="cube-triplet-v2")
     args = parser.parse_args()
 
     with args.config.open("r", encoding="utf-8") as handle:
@@ -208,7 +175,7 @@ def main() -> None:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     examples = load_examples(dataset_path)
-    train_examples, val_examples = split_examples_by_anchor(
+    train_examples, val_examples = split_examples(
         examples,
         train_split=config["training"]["train_split"],
         seed=config["training"]["seed"],
@@ -245,6 +212,7 @@ def main() -> None:
 
     solved_indices = torch.tensor([state_key_to_indices(SOLVED_STATE_KEY)], dtype=torch.long, device=device)
     margin = config["training"]["margin"]
+    solved_cosine_weight = config["training"].get("solved_cosine_weight", 0.0)
     grad_clip_norm = config["training"].get("grad_clip_norm")
 
     tensorboard_config = config.get("logging", {}).get("tensorboard", {})
@@ -255,7 +223,7 @@ def main() -> None:
         writer = SummaryWriter(log_dir=str(log_dir))
         print(f"TensorBoard log dir: {log_dir}")
 
-    early_stop_metric = config["training"].get("early_stop_metric", "triplet_accuracy")
+    early_stop_metric = config["training"].get("early_stop_metric", "solved_cosine")
     early_stop_mode = config["training"].get("early_stop_mode", "max")
     best_triplet_acc = float("-inf")
     best_solved_cosine = float("-inf")
@@ -266,6 +234,8 @@ def main() -> None:
     for epoch in range(config["training"]["epochs"]):
         model.train()
         train_loss = 0.0
+        train_triplet_loss = 0.0
+        train_solved_loss = 0.0
         progress = tqdm(train_loader, desc=f"epoch {epoch + 1}")
 
         for batch in progress:
@@ -276,9 +246,14 @@ def main() -> None:
             anchors = encode_normalized(model, anchor_states)
             positives = encode_normalized(model, positive_states)
             negatives = encode_normalized(model, negative_states)
-            mined_negatives = select_semi_hard_negatives(anchors, positives, negatives, margin)
+            solved_embedding = encode_normalized(model, solved_indices)
 
-            loss = triplet_loss(anchors, positives, mined_negatives, margin)
+            triplet_component = triplet_loss(anchors, positives, negatives, margin)
+            solved_component = solved_cosine_loss(
+                torch.cat([anchors, positives, negatives], dim=0),
+                solved_embedding,
+            )
+            loss = triplet_component + solved_cosine_weight * solved_component
 
             optimizer.zero_grad()
             loss.backward()
@@ -287,17 +262,28 @@ def main() -> None:
             optimizer.step()
 
             train_loss += loss.item()
+            train_triplet_loss += triplet_component.item()
+            train_solved_loss += solved_component.item()
             global_step += 1
 
             if writer and global_step % tensorboard_config.get("log_every_steps", 10) == 0:
-                writer.add_scalar("loss/triplet", loss.item(), global_step)
+                writer.add_scalar("loss/total", loss.item(), global_step)
+                writer.add_scalar("loss/triplet", triplet_component.item(), global_step)
+                writer.add_scalar("loss/solved_cosine", solved_component.item(), global_step)
 
-            progress.set_postfix(loss=f"{loss.item():.4f}")
+            progress.set_postfix(
+                loss=f"{loss.item():.4f}",
+                triplet=f"{triplet_component.item():.4f}",
+            )
 
         if scheduler:
             scheduler.step()
 
-        train_metrics = {"loss": train_loss / len(train_loader)}
+        train_metrics = {
+            "loss": train_loss / len(train_loader),
+            "triplet_loss": train_triplet_loss / len(train_loader),
+            "solved_cosine_loss": train_solved_loss / len(train_loader),
+        }
         val_metrics = evaluate(model, val_loader, device, margin, solved_indices)
 
         print(
@@ -306,7 +292,7 @@ def main() -> None:
             f"val_loss={val_metrics['loss']:.4f} "
             f"val_triplet_accuracy={val_metrics['triplet_accuracy']:.4f} "
             f"val_solved_cosine={val_metrics['solved_cosine']:.4f} "
-            f"val_length_correlation={val_metrics['length_correlation']:.4f}"
+            f"val_distance_correlation={val_metrics['distance_correlation']:.4f}"
         )
 
         if writer:
@@ -314,7 +300,7 @@ def main() -> None:
             writer.add_scalar("epoch/val_loss", val_metrics["loss"], epoch)
             writer.add_scalar("metrics/val_triplet_accuracy", val_metrics["triplet_accuracy"], epoch)
             writer.add_scalar("metrics/val_solved_cosine", val_metrics["solved_cosine"], epoch)
-            writer.add_scalar("metrics/val_length_correlation", val_metrics["length_correlation"], epoch)
+            writer.add_scalar("metrics/val_distance_correlation", val_metrics["distance_correlation"], epoch)
             if scheduler:
                 writer.add_scalar("lr", scheduler.get_last_lr()[0], epoch)
 
