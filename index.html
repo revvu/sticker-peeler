@@ -55,16 +55,14 @@
       line-height: 1.55;
     }
 
-    .scramble-panel {
+    .control-panel {
       position: fixed;
       left: 50%;
       bottom: 18px;
-      width: min(720px, calc(100vw - 32px));
+      width: min(760px, calc(100vw - 32px));
       transform: translateX(-50%);
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 12px;
-      align-items: center;
+      gap: 10px;
       padding: 12px;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
@@ -73,18 +71,43 @@
       backdrop-filter: blur(10px);
     }
 
-    .scramble-panel button {
+    .control-toolbar {
+      display: grid;
+      grid-template-columns: auto minmax(180px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .control-panel button,
+    .control-panel select {
       min-height: 38px;
+      border-radius: 6px;
+      font: 700 13px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .control-panel button {
       padding: 0 14px;
       border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 6px;
       background: #f5f7fa;
       color: #151719;
-      font: 700 13px/1 Inter, ui-sans-serif, system-ui, sans-serif;
       cursor: pointer;
     }
 
-    .scramble-panel button:disabled {
+    .control-panel button:disabled {
+      cursor: not-allowed;
+      opacity: 0.44;
+    }
+
+    .control-panel select {
+      width: 100%;
+      padding: 0 34px 0 11px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.09);
+      color: #f8fafc;
+      cursor: pointer;
+    }
+
+    .control-panel select:disabled {
       cursor: wait;
       opacity: 0.62;
     }
@@ -102,6 +125,30 @@
       font: 500 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
     }
 
+    .solver-step-log {
+      min-height: 24px;
+      max-height: 132px;
+      margin: 0;
+      padding: 0 0 0 24px;
+      overflow-y: auto;
+      color: #dbeafe;
+      font: 700 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .solver-step-log:empty {
+      padding-left: 0;
+    }
+
+    .solver-step-log:empty::before {
+      content: "Solver steps will appear here.";
+      color: #94a3b8;
+      font: 500 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .solver-step-log li {
+      padding-left: 4px;
+    }
+
     kbd {
       display: inline-flex;
       min-width: 22px;
@@ -117,8 +164,8 @@
       font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
-    @media (max-width: 560px) {
-      .scramble-panel {
+    @media (max-width: 620px) {
+      .control-toolbar {
         grid-template-columns: 1fr;
       }
     }
@@ -133,9 +180,14 @@
     </p>
   </div>
 
-  <div class="scramble-panel">
-    <button type="button" id="scrambleButton">Scramble</button>
+  <div class="control-panel">
+    <div class="control-toolbar">
+      <button type="button" id="scrambleButton">Scramble</button>
+      <select id="solverSelect" aria-label="Solver"></select>
+      <button type="button" id="solverStepButton">Step</button>
+    </div>
     <div class="scramble-sequence" id="scrambleSequence" aria-live="polite"></div>
+    <ol class="solver-step-log" id="solverStepLog" aria-live="polite"></ol>
   </div>
 
   <script type="importmap">
@@ -146,421 +198,6 @@
       }
     }
   </script>
-  <script type="module">
-    import * as THREE from "three";
-    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x151719);
-
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(5, 4.5, 6);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    document.body.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.target.set(0, 0, 0);
-    controls.update();
-
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x2f3540, 2.2));
-
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
-    keyLight.position.set(6, 8, 5);
-    scene.add(keyLight);
-
-    const fillLight = new THREE.DirectionalLight(0xc7ddff, 0.9);
-    fillLight.position.set(-5, 2, -4);
-    scene.add(fillLight);
-
-    const bottomLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    bottomLight.position.set(-3, -6, 4);
-    scene.add(bottomLight);
-
-    const cubelets = [];
-    const cubeletSize = 0.96;
-    const stickerSize = 0.86;
-    const stickerOffset = cubeletSize / 2 + 0.006;
-    const turnDuration = 260;
-    const scrambleTurnDuration = turnDuration / 2;
-    const quarterTurn = Math.PI / 2;
-    const reusableVector = new THREE.Vector3();
-    const reusableMatrix = new THREE.Matrix4();
-
-    const stickerColors = {
-      right: 0xd8292f,
-      left: 0xff8a00,
-      up: 0xf8fafc,
-      down: 0xffd000,
-      front: 0x1fbf5b,
-      back: 0x2563eb,
-      hidden: 0x101214
-    };
-
-    const moveMap = {
-      f: { axis: "z", layer: 1, direction: -1 },
-      b: { axis: "z", layer: -1, direction: 1 },
-      u: { axis: "y", layer: 1, direction: -1 },
-      d: { axis: "y", layer: -1, direction: 1 },
-      r: { axis: "x", layer: 1, direction: -1 },
-      l: { axis: "x", layer: -1, direction: 1 }
-    };
-
-    function createStickerMaterial(color) {
-      return new THREE.MeshStandardMaterial({
-        color,
-        emissive: color,
-        emissiveIntensity: 0.08,
-        roughness: 0.54,
-        metalness: 0.02
-      });
-    }
-
-    const bodyMaterial = new THREE.MeshStandardMaterial({
-      color: stickerColors.hidden,
-      roughness: 0.62,
-      metalness: 0.02
-    });
-
-    function addSticker(cubelet, color, position, rotation) {
-      const sticker = new THREE.Mesh(
-        new THREE.PlaneGeometry(stickerSize, stickerSize),
-        createStickerMaterial(color)
-      );
-
-      sticker.position.copy(position);
-      sticker.rotation.set(rotation.x, rotation.y, rotation.z);
-      cubelet.add(sticker);
-    }
-
-    function createCubelet(x, y, z) {
-      const cubelet = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(cubeletSize, cubeletSize, cubeletSize), bodyMaterial);
-      cubelet.add(body);
-
-      if (x === 1) {
-        addSticker(cubelet, stickerColors.right, new THREE.Vector3(stickerOffset, 0, 0), new THREE.Euler(0, Math.PI / 2, 0));
-      }
-
-      if (x === -1) {
-        addSticker(cubelet, stickerColors.left, new THREE.Vector3(-stickerOffset, 0, 0), new THREE.Euler(0, -Math.PI / 2, 0));
-      }
-
-      if (y === 1) {
-        addSticker(cubelet, stickerColors.up, new THREE.Vector3(0, stickerOffset, 0), new THREE.Euler(-Math.PI / 2, 0, 0));
-      }
-
-      if (y === -1) {
-        addSticker(cubelet, stickerColors.down, new THREE.Vector3(0, -stickerOffset, 0), new THREE.Euler(Math.PI / 2, 0, 0));
-      }
-
-      if (z === 1) {
-        addSticker(cubelet, stickerColors.front, new THREE.Vector3(0, 0, stickerOffset), new THREE.Euler(0, 0, 0));
-      }
-
-      if (z === -1) {
-        addSticker(cubelet, stickerColors.back, new THREE.Vector3(0, 0, -stickerOffset), new THREE.Euler(0, Math.PI, 0));
-      }
-
-      cubelet.position.set(x, y, z);
-      cubelet.userData.grid = new THREE.Vector3(x, y, z);
-      scene.add(cubelet);
-      cubelets.push(cubelet);
-    }
-
-    for (let x = -1; x <= 1; x += 1) {
-      for (let y = -1; y <= 1; y += 1) {
-        for (let z = -1; z <= 1; z += 1) {
-          if (x !== 0 || y !== 0 || z !== 0) {
-            createCubelet(x, y, z);
-          }
-        }
-      }
-    }
-
-    const moveQueue = [];
-    const scrambleButton = document.querySelector("#scrambleButton");
-    const scrambleSequence = document.querySelector("#scrambleSequence");
-    const scrambleFaces = ["F", "B", "U", "D", "R", "L"];
-    const scrambleSuffixes = ["", "'", "2"];
-    const moveSoundUrl = "assets/rubik-move.mp3";
-    const soundSliceDuration = 0.16;
-    const moveSoundOffsets = [
-      1.080, 1.280, 1.880, 2.080, 2.400, 3.480, 4.000, 6.800,
-      8.840, 9.600, 9.880, 10.600, 11.080, 11.560, 12.440, 13.600,
-      13.840, 14.080, 14.440, 15.240, 16.200, 17.640, 18.600, 19.560
-    ];
-    let audioContext = null;
-    let audioMaster = null;
-    let moveSoundBuffer = null;
-    let moveSoundLoadPromise = null;
-    let activeTurn = null;
-
-    function easeInOutCubic(t) {
-      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    }
-
-    function getFaceCubelets(axis, layer) {
-      return cubelets.filter((cubelet) => cubelet.userData.grid[axis] === layer);
-    }
-
-    function rotateGridPosition(grid, axis, direction) {
-      const { x, y, z } = grid;
-
-      if (axis === "x") {
-        grid.y = -direction * z;
-        grid.z = direction * y;
-      } else if (axis === "y") {
-        grid.x = direction * z;
-        grid.z = -direction * x;
-      } else {
-        grid.x = -direction * y;
-        grid.y = direction * x;
-      }
-    }
-
-    function snapNumber(value) {
-      return Math.round(value);
-    }
-
-    function snapQuaternionToRightAngles(cubelet) {
-      reusableMatrix.makeRotationFromQuaternion(cubelet.quaternion);
-      const elements = reusableMatrix.elements;
-      const xAxis = snapBasisVector(elements[0], elements[1], elements[2]);
-      const yAxis = snapBasisVector(elements[4], elements[5], elements[6]);
-      const zAxis = snapBasisVector(elements[8], elements[9], elements[10]);
-
-      reusableMatrix.makeBasis(xAxis, yAxis, zAxis);
-      cubelet.quaternion.setFromRotationMatrix(reusableMatrix).normalize();
-    }
-
-    function snapBasisVector(x, y, z) {
-      reusableVector.set(x, y, z);
-      const ax = Math.abs(x);
-      const ay = Math.abs(y);
-      const az = Math.abs(z);
-
-      if (ax >= ay && ax >= az) {
-        return new THREE.Vector3(Math.sign(x) || 1, 0, 0);
-      }
-
-      if (ay >= ax && ay >= az) {
-        return new THREE.Vector3(0, Math.sign(y) || 1, 0);
-      }
-
-      return new THREE.Vector3(0, 0, Math.sign(z) || 1);
-    }
-
-    async function unlockAudio() {
-      if (!audioContext) {
-        audioContext = new AudioContext();
-        const compressor = audioContext.createDynamicsCompressor();
-        compressor.threshold.value = -18;
-        compressor.knee.value = 18;
-        compressor.ratio.value = 5;
-        compressor.attack.value = 0.003;
-        compressor.release.value = 0.08;
-        compressor.connect(audioContext.destination);
-        audioMaster = compressor;
-      }
-
-      if (audioContext.state === "suspended") {
-        await audioContext.resume();
-      }
-
-      if (!moveSoundLoadPromise) {
-        moveSoundLoadPromise = fetch(moveSoundUrl)
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error(`Unable to load ${moveSoundUrl}`);
-            }
-            return response.arrayBuffer();
-          })
-          .then((audioData) => audioContext.decodeAudioData(audioData))
-          .then((buffer) => {
-            moveSoundBuffer = buffer;
-          })
-          .catch((error) => {
-            console.warn(error);
-          });
-      }
-    }
-
-    function playMoveSound(duration = turnDuration) {
-      void unlockAudio();
-
-      if (!audioContext || !moveSoundBuffer) {
-        return;
-      }
-
-      const source = audioContext.createBufferSource();
-      const gain = audioContext.createGain();
-      const now = audioContext.currentTime;
-      const sliceDuration = Math.min(soundSliceDuration, duration / 1000);
-      const offsets = moveSoundOffsets.filter((offset) => offset + sliceDuration < moveSoundBuffer.duration);
-      const offset = offsets[Math.floor(Math.random() * offsets.length)] ?? 0;
-
-      source.buffer = moveSoundBuffer;
-      source.playbackRate.value = 0.96 + Math.random() * 0.1;
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(1.8, now + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + sliceDuration);
-      source.connect(gain).connect(audioMaster);
-      source.start(now, offset, sliceDuration);
-    }
-
-    function finalizeTurn(turn) {
-      turn.pivot.rotation[turn.axis] = turn.angle;
-      turn.pivot.updateMatrixWorld(true);
-
-      turn.face.forEach((cubelet) => {
-        scene.attach(cubelet);
-        rotateGridPosition(cubelet.userData.grid, turn.axis, turn.direction);
-        cubelet.position.set(
-          snapNumber(cubelet.userData.grid.x),
-          snapNumber(cubelet.userData.grid.y),
-          snapNumber(cubelet.userData.grid.z)
-        );
-        snapQuaternionToRightAngles(cubelet);
-        cubelet.updateMatrixWorld(true);
-      });
-
-      scene.remove(turn.pivot);
-      activeTurn = null;
-      updateScrambleButton();
-      startNextTurn();
-    }
-
-    function startNextTurn() {
-      if (activeTurn || moveQueue.length === 0) {
-        return;
-      }
-
-      const move = moveQueue.shift();
-      const face = getFaceCubelets(move.axis, move.layer);
-      const pivot = new THREE.Object3D();
-      const angle = move.direction * quarterTurn;
-
-      scene.add(pivot);
-      pivot.updateMatrixWorld(true);
-      face.forEach((cubelet) => pivot.attach(cubelet));
-
-      activeTurn = {
-        ...move,
-        angle,
-        face,
-        pivot,
-        duration: move.duration ?? turnDuration,
-        startedAt: performance.now()
-      };
-      playMoveSound(activeTurn.duration);
-      updateScrambleButton();
-    }
-
-    function enqueueTurn(axis, layer, direction, duration = turnDuration) {
-      moveQueue.push({ axis, layer, direction, duration });
-      updateScrambleButton();
-      startNextTurn();
-    }
-
-    function updateScrambleButton() {
-      scrambleButton.disabled = Boolean(activeTurn || moveQueue.length > 0);
-    }
-
-    function generateScramble(length = 20) {
-      const moves = [];
-      let previousFace = "";
-
-      while (moves.length < length) {
-        const face = scrambleFaces[Math.floor(Math.random() * scrambleFaces.length)];
-        if (face === previousFace) {
-          continue;
-        }
-
-        const suffix = scrambleSuffixes[Math.floor(Math.random() * scrambleSuffixes.length)];
-        moves.push(`${face}${suffix}`);
-        previousFace = face;
-      }
-
-      return moves;
-    }
-
-    function enqueueNotationMove(notation) {
-      const face = notation[0].toLowerCase();
-      const suffix = notation.slice(1);
-      const move = moveMap[face];
-      const turns = suffix === "2" ? 2 : 1;
-      const direction = suffix === "'" ? -move.direction : move.direction;
-
-      for (let i = 0; i < turns; i += 1) {
-        enqueueTurn(move.axis, move.layer, direction, scrambleTurnDuration);
-      }
-    }
-
-    function runScramble() {
-      if (activeTurn || moveQueue.length > 0) {
-        return;
-      }
-
-      const scramble = generateScramble();
-      scrambleSequence.textContent = scramble.join(" ");
-      scramble.forEach(enqueueNotationMove);
-      updateScrambleButton();
-    }
-
-    window.addEventListener("keydown", (event) => {
-      const move = moveMap[event.key.toLowerCase()];
-      if (!move || event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
-
-      event.preventDefault();
-      const direction = event.shiftKey ? -move.direction : move.direction;
-      enqueueTurn(move.axis, move.layer, direction);
-    });
-
-    scrambleButton.addEventListener("click", runScramble);
-
-    function animate(now) {
-      requestAnimationFrame(animate);
-
-      if (activeTurn) {
-        const elapsed = now - activeTurn.startedAt;
-        const t = Math.min(elapsed / activeTurn.duration, 1);
-        activeTurn.pivot.rotation[activeTurn.axis] = activeTurn.angle * easeInOutCubic(t);
-
-        if (t >= 1) {
-          finalizeTurn(activeTurn);
-        }
-      }
-
-      controls.update();
-      renderer.render(scene, camera);
-    }
-
-    window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    window.cubeDebug = {
-      cubelets,
-      enqueueTurn,
-      generateScramble,
-      runScramble,
-      moveQueue,
-      get activeTurn() {
-        return activeTurn;
-      }
-    };
-
-    requestAnimationFrame(animate);
-  </script>
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>
