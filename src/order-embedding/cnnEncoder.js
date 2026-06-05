@@ -90,10 +90,8 @@ function runConvStack(input, channels, convLayers) {
     current = conv2d(current, currentChannels, height, width, layer);
     currentChannels = layer.out_channels;
 
-    if (layerIndex < convLayers.length - 1) {
-      for (let index = 0; index < current.length; index += 1) {
-        current[index] = gelu(current[index]);
-      }
+    for (let index = 0; index < current.length; index += 1) {
+      current[index] = gelu(current[index]);
     }
   }
 
@@ -151,6 +149,10 @@ export function encodeFaceGrid(faceGrid, weights) {
           hidden[index] = gelu(hidden[index]);
         }
       }
+    }
+
+    for (let index = 0; index < hidden.length; index += 1) {
+      hidden[index] = gelu(hidden[index]);
     }
 
     fusedFaces.push(hidden);
