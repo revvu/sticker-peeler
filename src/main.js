@@ -66,6 +66,7 @@ const scrambleSequence = document.querySelector("#scrambleSequence");
 const solverSelect = document.querySelector("#solverSelect");
 const solverStepButton = document.querySelector("#solverStepButton");
 const solverStepLog = document.querySelector("#solverStepLog");
+const solverConsole = document.querySelector("#solverConsole");
 const scrambleFaces = ["F", "B", "U", "D", "R", "L"];
 const scrambleSuffixes = ["", "'", "2"];
 const moveSoundUrl = "assets/rubik-move.mp3";
@@ -299,6 +300,31 @@ function appendSolverLog(text) {
   solverStepLog.scrollTop = solverStepLog.scrollHeight;
 }
 
+function appendConsoleMessage(text) {
+  const item = document.createElement("li");
+  const time = document.createElement("time");
+  const message = document.createElement("span");
+  const now = new Date();
+
+  item.className = "console-message";
+  time.dateTime = now.toISOString();
+  time.textContent = now.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+  message.textContent = text;
+  item.append(time, message);
+  solverConsole.appendChild(item);
+  solverConsole.scrollTop = solverConsole.scrollHeight;
+}
+
+function attachSolverConsole() {
+  for (const solver of availableSolvers) {
+    solver.setConsoleSink((message) => appendConsoleMessage(message));
+  }
+}
+
 function finalizeTurn(turn) {
   turn.pivot.rotation[turn.axis] = turn.angle;
   turn.pivot.updateMatrixWorld(true);
@@ -476,6 +502,7 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+attachSolverConsole();
 populateSolvers();
 updateControls();
 
@@ -487,6 +514,7 @@ window.cubeDebug = {
   runNotationMoves,
   treeSearch,
   availableSolvers,
+  appendConsoleMessage,
   moveQueue,
   get logicalCubeState() {
     return logicalCubeState.clone();

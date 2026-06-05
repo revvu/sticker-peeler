@@ -55,6 +55,58 @@
       line-height: 1.55;
     }
 
+    .console-panel {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .console-panel h2 {
+      margin: 0;
+      color: #f8fafc;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .console-stream {
+      min-height: 86px;
+      max-height: 132px;
+      margin: 0;
+      padding: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 7px;
+      background: rgba(15, 23, 42, 0.58);
+      overflow-y: auto;
+      list-style: none;
+    }
+
+    .console-stream:empty::before {
+      content: "Solver output will appear here.";
+      color: #94a3b8;
+      font: 500 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .console-message {
+      display: grid;
+      gap: 3px;
+      margin: 0 0 8px;
+      padding: 0;
+    }
+
+    .console-message time {
+      color: #8fb5ff;
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .console-message span {
+      color: #e5edf8;
+      font: 650 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
     .control-panel {
       position: fixed;
       left: 50%;
@@ -165,8 +217,16 @@
     }
 
     @media (max-width: 620px) {
+      .hud {
+        max-width: calc(100vw - 32px);
+      }
+
       .control-toolbar {
         grid-template-columns: 1fr;
+      }
+
+      .console-stream {
+        max-height: 104px;
       }
     }
   </style>
@@ -188,6 +248,10 @@
     </div>
     <div class="scramble-sequence" id="scrambleSequence" aria-live="polite"></div>
     <ol class="solver-step-log" id="solverStepLog" aria-live="polite"></ol>
+    <section class="console-panel" aria-label="Solver console">
+      <h2>Console</h2>
+      <ol class="console-stream" id="solverConsole" aria-live="polite"></ol>
+    </section>
   </div>
 
   <script type="importmap">
