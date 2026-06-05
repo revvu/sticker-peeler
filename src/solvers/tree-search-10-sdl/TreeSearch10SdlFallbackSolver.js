@@ -2,6 +2,7 @@ import { Solver } from "../Solver.js";
 import { cloneCubeState, getCubeStateKey, SOLVED_STATE_KEY } from "../../cube/CubeState.js";
 import {
   SDL_FALLBACK_DEPTH,
+  SDL_FALLBACK_MAX_SCORES,
   TREE_SEARCH_MAX_DEPTH,
   runDepthLimitedDistanceSearch,
   runForwardSearch
@@ -99,8 +100,15 @@ export class TreeSearch10SdlFallbackSolver extends Solver {
 
     await this.print(
       `SDL fallback: ${this.formatDuration(fallbackResult.searchMs)}, ` +
-      `${fallbackResult.searchedNodes} nodes`
+      `${fallbackResult.searchedNodes} states scored`
     );
+
+    if (fallbackResult.truncated) {
+      await this.print(
+        `SDL fallback: truncated at ${SDL_FALLBACK_MAX_SCORES} scores ` +
+        `(depth ${SDL_FALLBACK_DEPTH})`
+      );
+    }
 
     if (fallbackResult.moves.length === 0) {
       await this.print(

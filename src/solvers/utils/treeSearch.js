@@ -10,7 +10,8 @@ import { isMoveAllowed } from "./movePruning.js";
 import { buildTransformationCache } from "./transformationCache.js";
 
 export const TREE_SEARCH_MAX_DEPTH = 10;
-export const SDL_FALLBACK_DEPTH = 5;
+export const SDL_FALLBACK_DEPTH = 3;
+export const SDL_FALLBACK_MAX_SCORES = 2000;
 
 function compareCandidate(left, right) {
   if (left.distance !== right.distance) {
@@ -32,37 +33,57 @@ export function runDepthLimitedDistanceSearch(startStateKey, maxDepth, scoreFn) 
     moves: [],
     distance: startDistance
   }];
-  let searchedNodes = 1;
+  let scoredNodes = 1;
+  let truncated = false;
 
-  function visit(stateKey, moves, historyFaces, remainingDepth) {
-    if (remainingDepth === 0) {
-      return;
+  let frontier = new Map([[startStateKey, { stateKey: startStateKey, moves: [] }]]);
+
+  for (let depth = 0; depth < maxDepth && !truncated; depth += 1) {
+    const nextFrontier = new Map();
+
+    for (const node of frontier.values()) {
+      const historyFaces = node.moves.map(getMoveFace);
+
+      for (const move of ALL_MOVES) {
+        if (!isMoveAllowed(historyFaces, move)) {
+          continue;
+        }
+
+        const nextStateKey = applyMoveToKey(node.stateKey, move);
+        const nextMoves = [...node.moves, move];
+        const existing = nextFrontier.get(nextStateKey);
+
+        if (existing && existing.moves.length <= nextMoves.length) {
+          continue;
+        }
+
+        nextFrontier.set(nextStateKey, {
+          stateKey: nextStateKey,
+          moves: nextMoves
+        });
+      }
     }
 
-    for (const move of ALL_MOVES) {
-      if (!isMoveAllowed(historyFaces, move)) {
-        continue;
+    for (const node of nextFrontier.values()) {
+      if (scoredNodes >= SDL_FALLBACK_MAX_SCORES) {
+        truncated = true;
+        break;
       }
 
-      const nextStateKey = applyMoveToKey(stateKey, move);
-      const nextMoves = [...moves, move];
-      searchedNodes += 1;
       candidates.push({
-        stateKey: nextStateKey,
-        moves: nextMoves,
-        distance: scoreFn(nextStateKey)
+        stateKey: node.stateKey,
+        moves: node.moves,
+        distance: scoreFn(node.stateKey)
       });
-
-      visit(
-        nextStateKey,
-        nextMoves,
-        [...historyFaces, getMoveFace(move)],
-        remainingDepth - 1
-      );
+      scoredNodes += 1;
     }
-  }
 
-  visit(startStateKey, [], [], maxDepth);
+    if (truncated) {
+      break;
+    }
+
+    frontier = nextFrontier;
+  }
 
   const improvingCandidates = candidates.filter((candidate) => candidate.distance < startDistance);
   const pool = improvingCandidates.length > 0 ? improvingCandidates : candidates;
@@ -73,7 +94,8 @@ export function runDepthLimitedDistanceSearch(startStateKey, maxDepth, scoreFn) 
     moves: best.moves,
     bestDistance: best.distance,
     startDistance,
-    searchedNodes,
+    searchedNodes: scoredNodes,
+    truncated,
     searchMs: performance.now() - searchStart
   };
 }
