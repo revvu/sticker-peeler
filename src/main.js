@@ -9,6 +9,10 @@ import { treeSearch } from "./solvers/utils/treeSearch.js";
 import { availableSolvers } from "./solvers/index.js";
 import { getSimilarityToSolved as getJepaSimilarityToSolved, initJepaEncoder } from "./jepa/similarity.js";
 import { initDistanceModel, predictDistanceToSolved } from "./supervised-distance/predict.js";
+import {
+  initOrderEmbeddingModel,
+  predictOrderDistanceToSolved
+} from "./order-embedding/predict.js";
 import { getSimilarityToSolved as getTripletSimilarityToSolved, initTripletEncoder } from "./triplet/similarity.js";
 
 const scene = new THREE.Scene();
@@ -67,6 +71,7 @@ const moveQueue = [];
 const jepaSimilarity = document.querySelector("#jepaSimilarity");
 const tripletSimilarity = document.querySelector("#tripletSimilarity");
 const distanceToSolved = document.querySelector("#distanceToSolved");
+const orderDistanceToSolved = document.querySelector("#orderDistanceToSolved");
 const scrambleButton = document.querySelector("#scrambleButton");
 const scrambleSequence = document.querySelector("#scrambleSequence");
 const solverSelect = document.querySelector("#solverSelect");
@@ -433,6 +438,15 @@ function updateHudMetrics() {
       distanceToSolved.innerHTML = `(SDL) Distance to solved: <strong>${distance.toFixed(1)}</strong>`;
     }
   }
+
+  if (orderDistanceToSolved) {
+    const orderDistance = predictOrderDistanceToSolved(stateKey);
+    if (orderDistance === null) {
+      orderDistanceToSolved.textContent = "(OECNN) Distance to solved: unavailable";
+    } else {
+      orderDistanceToSolved.innerHTML = `(OECNN) Distance to solved: <strong>${orderDistance.toFixed(1)}</strong>`;
+    }
+  }
 }
 
 function runNotationMoves(moves, duration = turnDuration) {
@@ -564,7 +578,12 @@ window.addEventListener("resize", () => {
 attachSolverConsole();
 populateSolvers();
 updateControls();
-Promise.all([initJepaEncoder(), initTripletEncoder(), initDistanceModel()]).then(updateHudMetrics);
+Promise.all([
+  initJepaEncoder(),
+  initTripletEncoder(),
+  initDistanceModel(),
+  initOrderEmbeddingModel()
+]).then(updateHudMetrics);
 
 window.cubeDebug = {
   cubelets,
