@@ -56,10 +56,22 @@
     }
 
     .console-panel {
+      position: fixed;
+      left: 16px;
+      bottom: 166px;
+      z-index: 2;
+      width: min(336px, calc(100vw - 32px));
+      height: 220px;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
       gap: 8px;
       min-width: 0;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(20, 22, 25, 0.78);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(10px);
     }
 
     .console-panel h2 {
@@ -72,15 +84,24 @@
     }
 
     .console-stream {
-      min-height: 86px;
-      max-height: 132px;
+      min-height: 0;
+      height: 100%;
       margin: 0;
       padding: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
       border: 1px solid rgba(148, 163, 184, 0.18);
       border-radius: 7px;
       background: rgba(15, 23, 42, 0.58);
       overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
       list-style: none;
+    }
+
+    .console-stream.is-overflowing {
+      justify-content: flex-start;
     }
 
     .console-stream:empty::before {
@@ -91,9 +112,14 @@
 
     .console-message {
       display: grid;
+      flex: 0 0 auto;
       gap: 3px;
       margin: 0 0 8px;
       padding: 0;
+    }
+
+    .console-message:last-child {
+      margin-bottom: 0;
     }
 
     .console-message time {
@@ -111,6 +137,7 @@
       position: fixed;
       left: 50%;
       bottom: 18px;
+      z-index: 3;
       width: min(760px, calc(100vw - 32px));
       transform: translateX(-50%);
       display: grid;
@@ -221,12 +248,20 @@
         max-width: calc(100vw - 32px);
       }
 
+      .console-panel {
+        bottom: 252px;
+        height: 148px;
+      }
+
       .control-toolbar {
         grid-template-columns: 1fr;
       }
+    }
 
-      .console-stream {
-        max-height: 104px;
+    @media (max-width: 620px) and (max-height: 700px) {
+      .console-panel {
+        bottom: 228px;
+        height: 124px;
       }
     }
   </style>
@@ -240,6 +275,11 @@
     </p>
   </div>
 
+  <section class="console-panel" aria-label="Solver console">
+    <h2>Console</h2>
+    <ol class="console-stream" id="solverConsole" aria-live="polite"></ol>
+  </section>
+
   <div class="control-panel">
     <div class="control-toolbar">
       <button type="button" id="scrambleButton">Scramble</button>
@@ -248,10 +288,6 @@
     </div>
     <div class="scramble-sequence" id="scrambleSequence" aria-live="polite"></div>
     <ol class="solver-step-log" id="solverStepLog" aria-live="polite"></ol>
-    <section class="console-panel" aria-label="Solver console">
-      <h2>Console</h2>
-      <ol class="console-stream" id="solverConsole" aria-live="polite"></ol>
-    </section>
   </div>
 
   <script type="importmap">

@@ -300,6 +300,24 @@ function appendSolverLog(text) {
   solverStepLog.scrollTop = solverStepLog.scrollHeight;
 }
 
+function getElementBlockSize(element) {
+  const style = getComputedStyle(element);
+  const marginTop = parseFloat(style.marginTop) || 0;
+  const marginBottom = parseFloat(style.marginBottom) || 0;
+
+  return element.offsetHeight + marginTop + marginBottom;
+}
+
+function updateConsoleOverflow() {
+  const contentHeight = Array.from(solverConsole.children).reduce(
+    (total, child) => total + getElementBlockSize(child),
+    0
+  );
+
+  solverConsole.classList.toggle("is-overflowing", contentHeight > solverConsole.clientHeight);
+  solverConsole.scrollTop = solverConsole.scrollHeight;
+}
+
 function appendConsoleMessage(text) {
   const item = document.createElement("li");
   const time = document.createElement("time");
@@ -316,7 +334,7 @@ function appendConsoleMessage(text) {
   message.textContent = text;
   item.append(time, message);
   solverConsole.appendChild(item);
-  solverConsole.scrollTop = solverConsole.scrollHeight;
+  updateConsoleOverflow();
 }
 
 function attachSolverConsole() {
@@ -500,6 +518,7 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  updateConsoleOverflow();
 });
 
 attachSolverConsole();
