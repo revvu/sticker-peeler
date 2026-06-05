@@ -81,7 +81,9 @@ function buildQuarterPermutation(face, direction) {
   });
 }
 
-function composePermutations(firstPermutation, secondPermutation) {
+export const IDENTITY_PERMUTATION = STICKER_POSITIONS.map((_, index) => index);
+
+export function composePermutations(firstPermutation, secondPermutation) {
   return firstPermutation.map((nextIndex) => secondPermutation[nextIndex]);
 }
 
@@ -193,9 +195,12 @@ export function invertMoves(moves) {
   return [...moves].reverse().map(invertMove);
 }
 
-export function applyMoveToKey(stateKey, move) {
+export function getMovePermutation(move) {
+  return MOVE_PERMUTATIONS.get(normalizeMove(move));
+}
+
+export function applyPermutationToKey(stateKey, permutation) {
   const key = getCubeStateKey(stateKey);
-  const permutation = MOVE_PERMUTATIONS.get(normalizeMove(move));
   const nextState = new Array(key.length);
 
   for (let index = 0; index < key.length; index += 1) {
@@ -203,6 +208,14 @@ export function applyMoveToKey(stateKey, move) {
   }
 
   return nextState.join("");
+}
+
+export function getTransformationKey(permutation) {
+  return applyPermutationToKey(SOLVED_STATE_KEY, permutation);
+}
+
+export function applyMoveToKey(stateKey, move) {
+  return applyPermutationToKey(stateKey, getMovePermutation(move));
 }
 
 export function applyMovesToKey(stateKey, moves) {

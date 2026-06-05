@@ -1,49 +1,12 @@
 import {
   ALL_MOVES,
-  FACE_TURNS,
-  OPPOSITE_FACE,
   SOLVED_STATE_KEY,
   applyMoveToKey,
   getMoveFace
 } from "../../src/cube/CubeState.js";
+import { isMoveAllowed } from "../../src/solvers/utils/movePruning.js";
 
 const DEPTH = 5;
-
-function areParallelFaces(firstFace, secondFace) {
-  return (
-    firstFace !== secondFace &&
-    FACE_TURNS[firstFace].axis === FACE_TURNS[secondFace].axis
-  );
-}
-
-function isMoveAllowed(historyFaces, move) {
-  const face = getMoveFace(move);
-  const previousFace = historyFaces[historyFaces.length - 1];
-
-  if (face === previousFace) {
-    return false;
-  }
-
-  if (
-    previousFace &&
-    areParallelFaces(face, previousFace) &&
-    face < previousFace
-  ) {
-    return false;
-  }
-
-  const faceBeforePrevious = historyFaces[historyFaces.length - 2];
-
-  if (
-    faceBeforePrevious &&
-    OPPOSITE_FACE[faceBeforePrevious] === previousFace &&
-    (face === faceBeforePrevious || face === previousFace)
-  ) {
-    return false;
-  }
-
-  return true;
-}
 
 function measureSingleDirectionSearch(maxDepth) {
   const uniqueStates = new Set([SOLVED_STATE_KEY]);
