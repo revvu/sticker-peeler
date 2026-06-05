@@ -1,5 +1,5 @@
-import { TreeSearch7Solver } from "./tree-search-7/TreeSearch7Solver.js";
+import { TreeSearch10Solver } from "./tree-search-10/TreeSearch10Solver.js";
 
 export const availableSolvers = [
-  new TreeSearch7Solver()
+  new TreeSearch10Solver()
 ];

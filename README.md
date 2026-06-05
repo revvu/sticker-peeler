@@ -23,7 +23,7 @@ http://127.0.0.1:8000/index.html
 - Hold `Shift` with a face key for counterclockwise rotation.
 - Use `Scramble` for a random animated 20-move scramble.
 - Select a solver and use `Step` to run one solver step and log its moves.
-- `Tree Search(7)` finds a solution within 7 moves from the current state, or logs that none was found.
+- `Tree Search(10)` finds a solution within 10 moves from the current state, or logs that none was found.
 - Solver status messages appear in the left-side solver chat console.
 
 ## Audio

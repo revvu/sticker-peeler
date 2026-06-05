@@ -1,5 +1,6 @@
 import {
   ALL_MOVES,
+  FACE_TURNS,
   OPPOSITE_FACE,
   SOLVED_STATE_KEY,
   applyMoveToKey,
@@ -8,13 +9,30 @@ import {
   invertMoves
 } from "../../cube/CubeState.js";
 
+export const TREE_SEARCH_MAX_DEPTH = 10;
+
 const solvedIndexesByDepth = new Map();
+
+function areParallelFaces(firstFace, secondFace) {
+  return (
+    firstFace !== secondFace &&
+    FACE_TURNS[firstFace].axis === FACE_TURNS[secondFace].axis
+  );
+}
 
 function isMoveAllowed(historyFaces, move) {
   const face = getMoveFace(move);
   const previousFace = historyFaces[historyFaces.length - 1];
 
   if (face === previousFace) {
+    return false;
+  }
+
+  if (
+    previousFace &&
+    areParallelFaces(face, previousFace) &&
+    face < previousFace
+  ) {
     return false;
   }
 
@@ -66,7 +84,7 @@ function buildSolvedIndex(maxDepth) {
   return index;
 }
 
-export function treeSearch(cubeState, maxDepth = 7) {
+export function treeSearch(cubeState, maxDepth = TREE_SEARCH_MAX_DEPTH) {
   const startStateKey = getCubeStateKey(cubeState);
 
   if (startStateKey === SOLVED_STATE_KEY) {
