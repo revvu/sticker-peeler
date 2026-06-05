@@ -1,17 +1,15 @@
 model:
   latent_dim: 128
   sticker_embed_dim: 16
-  move_embed_dim: 32
   hidden_dim: 256
-  ema_momentum: 0.996
 
 training:
-  batch_size: 128
+  batch_size: 256
   epochs: 100
   learning_rate: 0.0003
   weight_decay: 0.0001
-  vicreg_weight: 0.05
-  early_stop_metric: val_cosine
+  margin: 0.2
+  early_stop_metric: triplet_accuracy
   early_stop_mode: max
   early_stop_patience: 15
   train_split: 0.85
@@ -23,12 +21,12 @@ training:
 logging:
   tensorboard:
     enabled: true
-    log_dir: runs/cube-jepa
+    log_dir: runs/cube-triplet
     log_every_steps: 10
   wandb:
     enabled: false
-    project: sticker-peeler-jepa
+    project: sticker-peeler-triplet
 
 paths:
-  dataset: data/dataset.jsonl
+  dataset: data/triplets.jsonl
   checkpoints: checkpoints

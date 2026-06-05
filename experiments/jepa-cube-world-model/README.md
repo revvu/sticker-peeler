@@ -5,29 +5,25 @@ Action-conditioned JEPA prototype for Rubik's cube transitions: encode a start s
 ## Method
 
 - **Encoder**: MLP over 54 face-index stickers → 128-d latent vector
-- **Move context**: GRU over pruned move sequences (length 0–15)
+- **Move context**: GRU over pruned move sequences (length 0–20)
 - **Predictor**: MLP on `[z_start || move_context]` → predicted `z_end`
 - **Target encoder**: EMA copy of context encoder (stop-gradient targets)
 - **Loss**: L1 latent prediction + VICReg anti-collapse regularizer
 
+## Dataset v2 (shallow near-solved states)
+
 Training data is generated in Node from **reachable** states only:
 
-1. Apply a real 20-move scramble to solved
-2. Apply a pruned continuation (0–15 moves, same rules as tree search)
-3. Record `(startKey, moves, endKey)`
+1. Start at `SOLVED_STATE_KEY` (always included as a `startKey`)
+2. Sample shallow scrambles of **0–15** pruned moves to reach additional `startKey` values
+3. For each `startKey`, emit **5–10** independent pruned continuations (0–20 moves)
+4. Record `(startKey, moves, endKey)` per row (~200k total)
+
+This focuses on partial-structure variation near solved — better aligned with the similarity-to-solved HUD than deep scrambles.
 
 ## Library note
 
 This experiment uses a **custom PyTorch JEPA-style module** (`models/cube_jepa.py`) tailored to tabular cube states. The [PyPI `jepa`](https://pypi.org/project/jepa/) package is a good reference for action-conditioned patterns, but vision-oriented trainers were not used here.
-
-## Research estimates
-
-| Question | Answer |
-|----------|--------|
-| **Loss** | L1 on latent prediction + VICReg (variance + covariance) |
-| **10k training time** | ~5–30 minutes on a laptop GPU / Apple Silicon |
-| **10k data** | Enough to validate the pipeline; not enough for a general solver |
-| **Practical scale** | 100k–1M for local dynamics; 200M+ for competitive solving (DeepCubeA literature) |
 
 ## Setup
 
@@ -38,7 +34,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Generate dataset (10,000 examples)
+## Generate dataset (~200,000 examples)
 
 ```sh
 node generate-dataset.js
@@ -49,34 +45,38 @@ Writes `data/dataset.jsonl` and `data/stats.json`.
 ## Train
 
 ```sh
-python train.py --run-name cube-10k-v1
+python train.py --run-name cube-200k-v2
 ```
 
-Checkpoints saved to `checkpoints/best.pt`.
+Checkpoints saved to `checkpoints/`:
+
+| File | Criterion |
+|------|-----------|
+| `best_cosine.pt` | Best `val_cosine` (used for HUD export) |
+| `best_loss.pt` | Best `val_total` |
+| `best.pt` | Alias of `best_loss.pt` |
+
+Training defaults (see `configs/default.yaml`):
+
+- Early stop on `val_cosine` (patience 15)
+- State-disjoint val split (hold out 15% of `startKey` values)
+- `vicreg_weight: 0.05`, cosine LR decay, grad clip 1.0
 
 ## Export encoder for browser HUD
-
-After training, export the context encoder weights to JSON for in-browser inference (no PyTorch):
 
 ```sh
 python export_encoder.py
 ```
 
-Writes `assets/jepa/encoder_weights.json` at the repo root. The Rubik's cube emulator loads this file and shows **(JEPA) Similarity to solved** in the top HUD — cosine similarity between the current state embedding and the solved-state embedding.
-
-Re-run export after each training run to refresh the HUD weights.
+Defaults to `best_cosine.pt` (falls back to `best.pt`). Writes `assets/jepa/encoder_weights.json` at the repo root.
 
 ## Live visualization (TensorBoard)
-
-In a second terminal:
 
 ```sh
 tensorboard --logdir experiments/jepa-cube-world-model/runs
 ```
 
-Open http://localhost:6006 for live `loss/*` and `metrics/val_cosine` curves.
-
-Optional Weights & Biases: set `logging.wandb.enabled: true` in `configs/default.yaml` and run `wandb login`.
+Open http://localhost:6006 for `loss/*`, `metrics/val_cosine`, `metrics/val_solved_cosine`, and `metrics/val_encoder_nn_accuracy`.
 
 ## Metrics
 
@@ -84,30 +84,26 @@ Optional Weights & Biases: set `logging.wandb.enabled: true` in `configs/default
 |--------|---------|
 | `loss/l1` | Latent prediction error |
 | `loss/vicreg` | Collapse prevention penalty |
-| `metrics/val_cosine` | Alignment of predicted vs target embeddings |
-| `metrics/val_nn_accuracy` | Nearest-neighbor retrieval of correct `endKey` |
+| `epoch/val_l1` | Validation L1 (without VICReg noise) |
+| `metrics/val_cosine` | Predicted vs target embedding alignment |
+| `metrics/val_solved_cosine` | Context encoder alignment to solved (HUD proxy) |
+| `metrics/val_nn_accuracy` | Predictor NN retrieval of correct `endKey` |
+| `metrics/val_encoder_nn_accuracy` | Context encoder NN retrieval of correct `endKey` |
 
-## Results (initial 10k run)
+## Results
 
-Smoke training on Apple Silicon (100 epochs max, early stop patience 10):
+### v1 (10k deep scramble)
 
-- Best val total loss: ~0.97 (epoch 11)
-- Val cosine: ~0.79 at best checkpoint
-- Val NN accuracy: ~0% (expected at 10k — retrieval metric is strict)
+- Best `val_total`: ~0.97 (epoch 11)
+- Final `val_cosine`: ~0.79
+- `val_nn_accuracy`: ~0%
 
-## Training improvement roadmap
+### v2 (200k shallow, multi-continuation)
 
-Ordered by expected impact for the next iteration:
+`cube-200k-v2` on Apple Silicon (early stop epoch 16, patience 15 on `val_cosine`):
 
-| Priority | Change | Why |
-|----------|--------|-----|
-| 1 | **Scale data to 100k–500k** | 10k validates the pipeline; embeddings are not discriminative yet (NN accuracy ~0%) |
-| 2 | **Increase continuation range** (0–20) | Match scramble depths; cover more dynamics |
-| 3 | **Early stop on `val_cosine`** (maximize) not just `val_total` | Cosine kept improving after val loss plateaued |
-| 4 | **More data diversity** — variable base scramble length (15–25), multiple continuations per start state | Reduces overfitting to unique start states |
-| 5 | **Larger latent dim** (256) or deeper MLP | More capacity once data scales |
-| 6 | **Multi-step rollout loss** (2-step predictor unroll) | V-JEPA 2-AC pattern; better long-horizon dynamics |
-| 7 | **Export + use predictor** in browser | Enables latent rollout planning (future solver) |
-| 8 | **Hard negatives in eval** — NN accuracy over full val bank | Better metric than cosine alone for "useful embedding" |
-
-For the similarity HUD: even a weak model may show higher similarity when nearly solved and lower when scrambled — useful as a coarse distance indicator once retrained on more data.
+- Dataset: 200k rows, 26,650 unique shallow `startKey` values, `SOLVED_STATE_KEY` included
+- Best `val_cosine`: **0.946** (epoch 1) → saved to `best_cosine.pt`
+- Best `val_total`: **0.835** (epoch 11) → saved to `best_loss.pt`
+- Peak `val_nn_accuracy`: ~2.2% (epoch 11)
+- `val_solved_cosine` remained negative early in training — HUD export uses `best_cosine.pt`; re-export after longer runs if solved alignment is the priority
