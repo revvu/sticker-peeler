@@ -1,0 +1,29 @@
+model:
+  latent_dim: 128
+  sticker_embed_dim: 16
+  move_embed_dim: 32
+  hidden_dim: 256
+  ema_momentum: 0.996
+
+training:
+  batch_size: 128
+  epochs: 100
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  vicreg_weight: 0.1
+  early_stop_patience: 10
+  train_split: 0.9
+  seed: 42
+
+logging:
+  tensorboard:
+    enabled: true
+    log_dir: runs/cube-jepa
+    log_every_steps: 10
+  wandb:
+    enabled: false
+    project: sticker-peeler-jepa
+
+paths:
+  dataset: data/dataset.jsonl
+  checkpoints: checkpoints

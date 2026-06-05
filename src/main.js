@@ -7,6 +7,7 @@ import {
 } from "./cube/CubeState.js";
 import { treeSearch } from "./solvers/utils/treeSearch.js";
 import { availableSolvers } from "./solvers/index.js";
+import { getSimilarityToSolved, initJepaEncoder } from "./jepa/similarity.js";
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x151719);
@@ -61,6 +62,7 @@ const stickerColors = {
 };
 
 const moveQueue = [];
+const jepaSimilarity = document.querySelector("#jepaSimilarity");
 const scrambleButton = document.querySelector("#scrambleButton");
 const scrambleSequence = document.querySelector("#scrambleSequence");
 const solverSelect = document.querySelector("#solverSelect");
@@ -398,6 +400,20 @@ function enqueueTurn(axis, layer, direction, duration = turnDuration) {
   startNextTurn();
 }
 
+function updateJepaSimilarity() {
+  if (!jepaSimilarity) {
+    return;
+  }
+
+  const similarity = getSimilarityToSolved(logicalCubeState.key);
+  if (similarity === null) {
+    jepaSimilarity.textContent = "(JEPA) Similarity to solved: unavailable";
+    return;
+  }
+
+  jepaSimilarity.innerHTML = `(JEPA) Similarity to solved: <strong>${similarity.toFixed(3)}</strong>`;
+}
+
 function runNotationMoves(moves, duration = turnDuration) {
   const normalizedMoves = moves.map(normalizeMove);
 
@@ -410,6 +426,7 @@ function runNotationMoves(moves, duration = turnDuration) {
     }
   }
 
+  updateJepaSimilarity();
   updateControls();
 }
 
@@ -524,6 +541,7 @@ window.addEventListener("resize", () => {
 attachSolverConsole();
 populateSolvers();
 updateControls();
+initJepaEncoder().then(updateJepaSimilarity);
 
 window.cubeDebug = {
   cubelets,
