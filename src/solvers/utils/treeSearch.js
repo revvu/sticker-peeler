@@ -10,6 +10,73 @@ import { isMoveAllowed } from "./movePruning.js";
 import { buildTransformationCache } from "./transformationCache.js";
 
 export const TREE_SEARCH_MAX_DEPTH = 10;
+export const SDL_FALLBACK_DEPTH = 5;
+
+function compareCandidate(left, right) {
+  if (left.distance !== right.distance) {
+    return left.distance - right.distance;
+  }
+
+  if (left.moves.length !== right.moves.length) {
+    return left.moves.length - right.moves.length;
+  }
+
+  return left.moves.join(" ").localeCompare(right.moves.join(" "));
+}
+
+export function runDepthLimitedDistanceSearch(startStateKey, maxDepth, scoreFn) {
+  const searchStart = performance.now();
+  const startDistance = scoreFn(startStateKey);
+  const candidates = [{
+    stateKey: startStateKey,
+    moves: [],
+    distance: startDistance
+  }];
+  let searchedNodes = 1;
+
+  function visit(stateKey, moves, historyFaces, remainingDepth) {
+    if (remainingDepth === 0) {
+      return;
+    }
+
+    for (const move of ALL_MOVES) {
+      if (!isMoveAllowed(historyFaces, move)) {
+        continue;
+      }
+
+      const nextStateKey = applyMoveToKey(stateKey, move);
+      const nextMoves = [...moves, move];
+      searchedNodes += 1;
+      candidates.push({
+        stateKey: nextStateKey,
+        moves: nextMoves,
+        distance: scoreFn(nextStateKey)
+      });
+
+      visit(
+        nextStateKey,
+        nextMoves,
+        [...historyFaces, getMoveFace(move)],
+        remainingDepth - 1
+      );
+    }
+  }
+
+  visit(startStateKey, [], [], maxDepth);
+
+  const improvingCandidates = candidates.filter((candidate) => candidate.distance < startDistance);
+  const pool = improvingCandidates.length > 0 ? improvingCandidates : candidates;
+  pool.sort(compareCandidate);
+  const best = pool[0];
+
+  return {
+    moves: best.moves,
+    bestDistance: best.distance,
+    startDistance,
+    searchedNodes,
+    searchMs: performance.now() - searchStart
+  };
+}
 
 export function runForwardSearch(startStateKey, transformationCache, forwardDepth, maxDepth) {
   const searchStart = performance.now();

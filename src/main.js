@@ -8,6 +8,7 @@ import {
 import { treeSearch } from "./solvers/utils/treeSearch.js";
 import { availableSolvers } from "./solvers/index.js";
 import { getSimilarityToSolved as getJepaSimilarityToSolved, initJepaEncoder } from "./jepa/similarity.js";
+import { initDistanceModel, predictDistanceToSolved } from "./supervised-distance/predict.js";
 import { getSimilarityToSolved as getTripletSimilarityToSolved, initTripletEncoder } from "./triplet/similarity.js";
 
 const scene = new THREE.Scene();
@@ -65,6 +66,7 @@ const stickerColors = {
 const moveQueue = [];
 const jepaSimilarity = document.querySelector("#jepaSimilarity");
 const tripletSimilarity = document.querySelector("#tripletSimilarity");
+const distanceToSolved = document.querySelector("#distanceToSolved");
 const scrambleButton = document.querySelector("#scrambleButton");
 const scrambleSequence = document.querySelector("#scrambleSequence");
 const solverSelect = document.querySelector("#solverSelect");
@@ -402,7 +404,7 @@ function enqueueTurn(axis, layer, direction, duration = turnDuration) {
   startNextTurn();
 }
 
-function updateEncoderSimilarity() {
+function updateHudMetrics() {
   const stateKey = logicalCubeState.key;
 
   if (jepaSimilarity) {
@@ -422,6 +424,15 @@ function updateEncoderSimilarity() {
       tripletSimilarity.innerHTML = `(Triplet Loss) Similarity to solved: <strong>${tripletScore.toFixed(3)}</strong>`;
     }
   }
+
+  if (distanceToSolved) {
+    const distance = predictDistanceToSolved(stateKey);
+    if (distance === null) {
+      distanceToSolved.textContent = "(SDL) Distance to solved: unavailable";
+    } else {
+      distanceToSolved.innerHTML = `(SDL) Distance to solved: <strong>${distance.toFixed(1)}</strong>`;
+    }
+  }
 }
 
 function runNotationMoves(moves, duration = turnDuration) {
@@ -436,7 +447,7 @@ function runNotationMoves(moves, duration = turnDuration) {
     }
   }
 
-  updateEncoderSimilarity();
+  updateHudMetrics();
   updateControls();
 }
 
@@ -507,6 +518,8 @@ function populateSolvers() {
     option.textContent = solver.label;
     solverSelect.appendChild(option);
   }
+
+  solverSelect.value = "tree-search-10-sdl";
 }
 
 window.addEventListener("keydown", (event) => {
@@ -551,7 +564,7 @@ window.addEventListener("resize", () => {
 attachSolverConsole();
 populateSolvers();
 updateControls();
-Promise.all([initJepaEncoder(), initTripletEncoder()]).then(updateEncoderSimilarity);
+Promise.all([initJepaEncoder(), initTripletEncoder(), initDistanceModel()]).then(updateHudMetrics);
 
 window.cubeDebug = {
   cubelets,
