@@ -1,0 +1,37 @@
+dataset:
+  train_samples_target: 1004000
+  train_samples: 1003995
+  val_samples: 100386
+  test_samples: 100386
+  path_length: 26
+  seed: 42
+
+model:
+  num_blocks: 10
+  channels: 32
+  num_colors: 6
+  num_classes: 27
+
+training:
+  batch_size: 512
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  early_stop_metric: val_mae
+  early_stop_mode: min
+  early_stop_patience: 15
+  grad_clip_norm: 1.0
+  lr_schedule: cosine
+  seed: 42
+
+logging:
+  tensorboard:
+    enabled: true
+    log_dir: runs/raw-resnet-10
+    log_every_steps: 20
+
+paths:
+  train_dataset: data/train.jsonl
+  val_dataset: data/val.jsonl
+  test_dataset: data/test.jsonl
+  checkpoints: checkpoints
