@@ -1,5 +1,1 @@
-torch
-tensorboard
-tqdm
-pyyaml
-scipy
+-r ../../../requirements.txt

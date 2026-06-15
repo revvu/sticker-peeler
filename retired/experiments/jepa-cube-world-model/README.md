@@ -28,9 +28,8 @@ This experiment uses a **custom PyTorch JEPA-style module** (`models/cube_jepa.p
 ## Setup
 
 ```sh
-cd experiments/jepa-cube-world-model
-python3 -m venv .venv
-source .venv/bin/activate
+cd retired/experiments/jepa-cube-world-model
+source ../../../.venv/bin/activate
 pip install -r requirements.txt
 ```
 

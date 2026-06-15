@@ -12,8 +12,8 @@ Vendrov-style order embeddings with a face-grid CNN encoder for asymmetric dista
 ## Setup
 
 ```sh
-cd experiments/order-embedding-cnn
-source ../jepa-cube-world-model/.venv/bin/activate
+cd retired/experiments/order-embedding-cnn
+source ../../../.venv/bin/activate
 pip install -r requirements.txt
 ```
 

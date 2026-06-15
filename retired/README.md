@@ -12,3 +12,15 @@ Neural distance-to-solved experiments and their browser runtime code. These are 
 | `src/*` | Browser inference + solvers |
 
 The active app uses **Tree Search(10)** only. See `experiment-checkpoints/EXPERIMENTS.md` for results and takeaways.
+
+## Python environment
+
+Use the shared repo-root venv and dependencies:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Per-experiment `requirements.txt` files under `retired/experiments/` include the root file.

@@ -2,6 +2,18 @@
 
 Static Three.js Rubik's Cube UI with bundled movement audio.
 
+## Python (experiments)
+
+Shared virtual environment and dependencies live at the repo root:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Retired and active ML experiments use this venv. TensorBoard logs are written under each experiment's `runs/` directory.
+
 ## Run
 
 From this directory:

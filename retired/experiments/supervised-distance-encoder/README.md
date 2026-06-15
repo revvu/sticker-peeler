@@ -17,8 +17,8 @@ Scramble depth from solved is a valid upper bound on true graph distance. God's 
 ## Setup
 
 ```sh
-cd experiments/supervised-distance-encoder
-source ../jepa-cube-world-model/.venv/bin/activate
+cd retired/experiments/supervised-distance-encoder
+source ../../../.venv/bin/activate
 pip install -r requirements.txt
 ```
 

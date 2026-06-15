@@ -32,16 +32,9 @@ This directly trains what the HUD and solver measure: `cosine(e(state), e(solved
 ## Setup
 
 ```sh
-cd experiments/triplet-cube-encoder
-python3 -m venv .venv
-source .venv/bin/activate
+cd retired/experiments/triplet-cube-encoder
+source ../../../.venv/bin/activate
 pip install -r requirements.txt
-```
-
-Or reuse the JEPA venv:
-
-```sh
-source experiments/jepa-cube-world-model/.venv/bin/activate
 ```
 
 ## Generate triplets (~200k)
