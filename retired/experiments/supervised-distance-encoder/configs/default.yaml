@@ -1,0 +1,35 @@
+model:
+  latent_dim: 128
+  sticker_embed_dim: 16
+  hidden_dim: 256
+
+training:
+  batch_size: 256
+  epochs: 200
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  huber_delta: 1.0
+  ordinal_weight: 0.1
+  ordinal_margin: 1.0
+  early_stop_metric: greedy_step_acc
+  early_stop_mode: max
+  early_stop_patience: 25
+  train_split: 0.9
+  grad_clip_norm: 1.0
+  lr_schedule: cosine
+  seed: 42
+
+logging:
+  tensorboard:
+    enabled: true
+    log_dir: runs/supervised-distance
+    log_every_steps: 10
+  wandb:
+    enabled: false
+    project: sticker-peeler-supervised-distance
+
+paths:
+  states_dataset: data/states.jsonl
+  ordinal_dataset: data/ordinal_pairs.jsonl
+  extrapolation_dataset: data/extrapolation.jsonl
+  checkpoints: checkpoints

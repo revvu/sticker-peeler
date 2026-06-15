@@ -7,13 +7,6 @@ import {
 } from "./cube/CubeState.js";
 import { treeSearch } from "./solvers/utils/treeSearch.js";
 import { availableSolvers } from "./solvers/index.js";
-import { getSimilarityToSolved as getJepaSimilarityToSolved, initJepaEncoder } from "./jepa/similarity.js";
-import { initDistanceModel, predictDistanceToSolved } from "./supervised-distance/predict.js";
-import {
-  initOrderEmbeddingModel,
-  predictOrderDistanceToSolved
-} from "./order-embedding/predict.js";
-import { getSimilarityToSolved as getTripletSimilarityToSolved, initTripletEncoder } from "./triplet/similarity.js";
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x151719);
@@ -68,10 +61,6 @@ const stickerColors = {
 };
 
 const moveQueue = [];
-const jepaSimilarity = document.querySelector("#jepaSimilarity");
-const tripletSimilarity = document.querySelector("#tripletSimilarity");
-const distanceToSolved = document.querySelector("#distanceToSolved");
-const orderDistanceToSolved = document.querySelector("#orderDistanceToSolved");
 const scrambleButton = document.querySelector("#scrambleButton");
 const scrambleSequence = document.querySelector("#scrambleSequence");
 const solverSelect = document.querySelector("#solverSelect");
@@ -409,46 +398,6 @@ function enqueueTurn(axis, layer, direction, duration = turnDuration) {
   startNextTurn();
 }
 
-function updateHudMetrics() {
-  const stateKey = logicalCubeState.key;
-
-  if (jepaSimilarity) {
-    const jepaScore = getJepaSimilarityToSolved(stateKey);
-    if (jepaScore === null) {
-      jepaSimilarity.textContent = "(JEPA) Similarity to solved: unavailable";
-    } else {
-      jepaSimilarity.innerHTML = `(JEPA) Similarity to solved: <strong>${jepaScore.toFixed(3)}</strong>`;
-    }
-  }
-
-  if (tripletSimilarity) {
-    const tripletScore = getTripletSimilarityToSolved(stateKey);
-    if (tripletScore === null) {
-      tripletSimilarity.textContent = "(Triplet Loss) Similarity to solved: unavailable";
-    } else {
-      tripletSimilarity.innerHTML = `(Triplet Loss) Similarity to solved: <strong>${tripletScore.toFixed(3)}</strong>`;
-    }
-  }
-
-  if (distanceToSolved) {
-    const distance = predictDistanceToSolved(stateKey);
-    if (distance === null) {
-      distanceToSolved.textContent = "(SDL) Distance to solved: unavailable";
-    } else {
-      distanceToSolved.innerHTML = `(SDL) Distance to solved: <strong>${distance.toFixed(1)}</strong>`;
-    }
-  }
-
-  if (orderDistanceToSolved) {
-    const orderDistance = predictOrderDistanceToSolved(stateKey);
-    if (orderDistance === null) {
-      orderDistanceToSolved.textContent = "(OECNN) Distance to solved: unavailable";
-    } else {
-      orderDistanceToSolved.innerHTML = `(OECNN) Distance to solved: <strong>${orderDistance.toFixed(1)}</strong>`;
-    }
-  }
-}
-
 function runNotationMoves(moves, duration = turnDuration) {
   const normalizedMoves = moves.map(normalizeMove);
 
@@ -461,7 +410,6 @@ function runNotationMoves(moves, duration = turnDuration) {
     }
   }
 
-  updateHudMetrics();
   updateControls();
 }
 
@@ -533,7 +481,7 @@ function populateSolvers() {
     solverSelect.appendChild(option);
   }
 
-  solverSelect.value = "tree-search-10-sdl";
+  solverSelect.value = "tree-search-10";
 }
 
 window.addEventListener("keydown", (event) => {
@@ -578,12 +526,6 @@ window.addEventListener("resize", () => {
 attachSolverConsole();
 populateSolvers();
 updateControls();
-Promise.all([
-  initJepaEncoder(),
-  initTripletEncoder(),
-  initDistanceModel(),
-  initOrderEmbeddingModel()
-]).then(updateHudMetrics);
 
 window.cubeDebug = {
   cubelets,
